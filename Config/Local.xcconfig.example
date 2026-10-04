@@ -1,0 +1,12 @@
+// Copy to Config/Local.xcconfig (git-ignored) and fill in.
+
+// Apple Developer team ID, e.g. ABCDE12345.
+AB_DEVELOPMENT_TEAM =
+
+// Optional: a bundle ID your team owns.
+// AB_BUNDLE_IDENTIFIER = com.example.alphabreast.scan
+
+// Optional soft lock shared with the web alpha page. Never commit the code itself; only its
+// SHA-256, from:  printf %s 'the-code' | shasum -a 256
+// Leave empty to rely on TestFlight's internal tester list instead.
+AB_ALPHA_CODE_SHA256 =

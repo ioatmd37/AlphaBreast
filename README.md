@@ -33,6 +33,34 @@ printf %s 'รหัส' | shasum -a 256
 ถ้าเว้นว่าง แอปจะไม่ถามรหัส และใช้รายชื่อผู้ทดสอบของ TestFlight แทน
 รหัสสั้นเดาจาก hash ได้ จึงเป็นแค่การล็อกแบบอ่อนตามสเปก
 
+## TestFlight
+
+`.github/workflows/testflight.yml` archive แอป sign อัตโนมัติ และอัปโหลดเป็น build แบบ internal testing เท่านั้น
+ทำงานทุกครั้งที่ push เข้า `main` หรือสั่งเองจากแท็บ Actions (Run workflow)
+ถ้ายังตั้งค่าไม่ครบ workflow จะขึ้นคำเตือนแล้วหยุด โดยไม่ขึ้นเป็นสีแดง
+
+ตั้งค่าครั้งเดียว:
+
+1. สมัคร Apple Developer Program
+2. ใน App Store Connect → Apps สร้างแอปใหม่ด้วย bundle ID ที่จะใช้ (เช่น `com.yourname.alphabreast.scan`)
+3. App Store Connect → Users and Access → Integrations → App Store Connect API สร้าง Team Key สิทธิ์ **Admin**
+   (ต้องใช้ Admin เพื่อให้ Xcode สร้าง certificate และ provisioning profile ให้อัตโนมัติ) ดาวน์โหลดไฟล์ `.p8` (โหลดได้ครั้งเดียว)
+4. ใน GitHub repo → Settings → Secrets and variables → Actions เพิ่ม:
+
+| ชนิด | ชื่อ | ค่า |
+|---|---|---|
+| Secret | `APP_STORE_CONNECT_KEY_ID` | Key ID ของ key จากข้อ 3 |
+| Secret | `APP_STORE_CONNECT_ISSUER_ID` | Issuer ID (อยู่บนหน้าเดียวกัน) |
+| Secret | `APP_STORE_CONNECT_KEY_P8` | เนื้อหาทั้งไฟล์ `.p8` รวมบรรทัด BEGIN/END |
+| Secret | `APPLE_TEAM_ID` | Team ID 10 ตัวอักษร (developer.apple.com → Membership) |
+| Variable | `AB_BUNDLE_IDENTIFIER` | bundle ID จากข้อ 2 |
+| Secret (ไม่บังคับ) | `AB_ALPHA_CODE_SHA256` | hash ของรหัส alpha |
+
+5. App Store Connect → TestFlight → Internal Testing สร้างกลุ่มและเพิ่มผู้ทดสอบ (ต้องเป็นสมาชิกทีมใน App Store Connect)
+
+เลข build ใช้ `github.run_number` ของ workflow จึงเพิ่มขึ้นเองทุกครั้ง
+ถ้าเคยอัปโหลด build ด้วยมือที่เลขสูงกว่านั้น ให้เพิ่มค่าคงที่ใน `BUILD_NUMBER` ของ workflow
+
 ## โครงสร้าง
 
 ```
@@ -63,6 +91,7 @@ swift test --package-path Packages/ScanCore
 ```
 
 CI (`.github/workflows/ci.yml`) รันเทสต์ ScanCore บน Linux และ build แอปแบบไม่ sign บน macOS
+การอัปโหลด TestFlight ดูหัวข้อ TestFlight ด้านบน
 
 ## ลำดับการใช้งาน
 

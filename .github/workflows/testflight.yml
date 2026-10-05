@@ -1,0 +1,102 @@
+name: TestFlight
+
+# Builds, signs and uploads an internal-only TestFlight build.
+# Setup is described in README.md ("TestFlight"). Until the secrets exist, the workflow
+# reports that it is not configured and stops without failing.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: testflight
+  cancel-in-progress: false
+
+jobs:
+  upload:
+    name: Archive and upload to TestFlight
+    runs-on: macos-15
+    timeout-minutes: 45
+    env:
+      ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+      ASC_KEY_P8: ${{ secrets.APP_STORE_CONNECT_KEY_P8 }}
+      TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      BUNDLE_ID: ${{ vars.AB_BUNDLE_IDENTIFIER }}
+      ALPHA_CODE_SHA256: ${{ secrets.AB_ALPHA_CODE_SHA256 }}
+      # Must increase with every upload.
+      BUILD_NUMBER: ${{ github.run_number }}
+    steps:
+      - name: Check configuration
+        id: config
+        run: |
+          missing=""
+          for name in ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_P8 TEAM_ID BUNDLE_ID; do
+            [ -n "${!name}" ] || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::warning title=TestFlight not configured::Missing:$missing. See README.md, section TestFlight."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.config.outputs.configured == 'true'
+
+      - name: Install XcodeGen
+        if: steps.config.outputs.configured == 'true'
+        run: brew install xcodegen
+
+      - name: ScanCore tests
+        if: steps.config.outputs.configured == 'true'
+        run: swift test --package-path Packages/ScanCore
+
+      - name: Write signing settings and API key
+        if: steps.config.outputs.configured == 'true'
+        run: |
+          {
+            echo "AB_DEVELOPMENT_TEAM = $TEAM_ID"
+            echo "AB_BUNDLE_IDENTIFIER = $BUNDLE_ID"
+            echo "AB_ALPHA_CODE_SHA256 = $ALPHA_CODE_SHA256"
+          } > Config/Local.xcconfig
+          sed "s/TEAM_ID_PLACEHOLDER/$TEAM_ID/" Config/ExportOptions-TestFlight.plist > "$RUNNER_TEMP/ExportOptions.plist"
+          umask 077
+          printf '%s\n' "$ASC_KEY_P8" > "$RUNNER_TEMP/AuthKey.p8"
+
+      - name: Generate project
+        if: steps.config.outputs.configured == 'true'
+        run: xcodegen generate
+
+      - name: Archive
+        if: steps.config.outputs.configured == 'true'
+        run: |
+          xcodebuild archive \
+            -project AlphaBreastScan.xcodeproj \
+            -scheme AlphaBreastScan \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/AlphaBreastScan.xcarchive" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/AuthKey.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER"
+
+      - name: Export and upload
+        if: steps.config.outputs.configured == 'true'
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/AlphaBreastScan.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -exportPath "$RUNNER_TEMP/export" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/AuthKey.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+          echo "Uploaded build $BUILD_NUMBER. It appears in App Store Connect → TestFlight after processing." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove API key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/AuthKey.p8"

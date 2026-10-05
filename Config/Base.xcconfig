@@ -1,0 +1,8 @@
+// Shared build settings. Put per-developer values in Config/Local.xcconfig (git-ignored);
+// see Config/Local.xcconfig.example.
+
+AB_BUNDLE_IDENTIFIER = com.alphabreast.scan
+AB_DEVELOPMENT_TEAM =
+AB_ALPHA_CODE_SHA256 =
+
+#include? "Local.xcconfig"
